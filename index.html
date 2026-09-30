@@ -153,7 +153,13 @@ input[type=color]::-moz-color-swatch{border:none;border-radius:50%}
 .empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(6px / var(--s));color:var(--ink,rgba(0,0,0,.3));font-size:calc(12.5px / var(--s));font-weight:500;pointer-events:none}
 .empty svg{width:calc(22px / var(--s));height:calc(22px / var(--s))}
 .empty.tiny span{display:none}
-.has-media .empty{display:none}
+.has-media .empty,.has-text .empty{display:none}
+.tlayer{position:absolute;inset:0;pointer-events:none}
+.tsvg{position:absolute;left:0;top:0;overflow:visible;font-kerning:normal}
+.text-area{width:100%;min-height:76px;resize:vertical;border:0;border-radius:8px;background:var(--fill);padding:8px 10px;font:inherit;color:inherit;line-height:1.4;user-select:text;-webkit-user-select:text}
+.text-area:focus{outline:2px solid var(--accent);outline-offset:0}
+input,textarea{user-select:text;-webkit-user-select:text}
+.seg.icons button svg{width:16px;height:16px;margin:auto}
 .badge{display:none;position:absolute;left:calc(10px / var(--s));top:calc(10px / var(--s));padding:calc(3px / var(--s)) calc(8px / var(--s));border-radius:calc(6px / var(--s));font:600 calc(11px / var(--s))/1.3 var(--font);font-variant-numeric:tabular-nums;color:#fff;background:rgba(0,0,0,.6);white-space:pre;pointer-events:none}
 .labels .badge{display:block}
 .lockb{display:none;position:absolute;right:calc(10px / var(--s));top:calc(10px / var(--s));width:calc(22px / var(--s));height:calc(22px / var(--s));border-radius:50%;background:rgba(0,0,0,.6);color:#fff;place-items:center;pointer-events:none}
@@ -438,6 +444,7 @@ kbd{font:500 11px var(--font);min-width:19px;height:19px;padding:0 5px;display:i
   </div>
 </div>
 <input type="file" id="filePick" accept="image/*,video/*,.mov,.m4v" multiple hidden>
+<input type="file" id="fontPick" accept=".ttf,.otf,.woff,.woff2" multiple hidden>
 
 <script>
 /* mp4-muxer 5.2.2 and webm-muxer 5.1.4 by Vanilagy, MIT License, https://github.com/Vanilagy */
@@ -481,6 +488,13 @@ const I = {
   play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.5 4.8v14.4a1 1 0 0 0 1.5.86l11.6-7.2a1 1 0 0 0 0-1.72L9 3.94a1 1 0 0 0-1.5.86Z"/></svg>',
   pause: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4.5" width="4" height="15" rx="1.2"/><rect x="14" y="4.5" width="4" height="15" rx="1.2"/></svg>',
   restart: ic('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/>'),
+  text: ic('<path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/>'),
+  alignL: ic('<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>'),
+  alignC: ic('<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>'),
+  alignR: ic('<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>'),
+  vTop: ic('<path d="M4 4.5h16"/><path d="M8 9h8M8 13h8"/>'),
+  vMid: ic('<path d="M8 10h8M8 14h8"/><path d="M4 4.5h16M4 19.5h16" opacity=".35"/>'),
+  vBot: ic('<path d="M4 19.5h16"/><path d="M8 11h8M8 15h8"/>'),
   lock: ic('<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'),
   unlock: ic('<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7"/>'),
 };
@@ -700,6 +714,7 @@ function doMerge(ids, keepId) {
   Object.assign(keep, m.rect);
   keep.media = mediaDonor ? mediaDonor.media : null;
   keep.fill = fillDonor ? fillDonor.fill : null;
+  if (!keep.text) { const td = members.find(b => b.text); keep.text = td ? td.text : null; }
   S.boxes = S.boxes.filter(b => b === keep || !m.ids.has(b.id));
   ui.sel = new Set([keep.id]); ui.anchor = keep.id;
   return m.ids.size;
@@ -900,15 +915,16 @@ function finalize(cells, pairs, kept) {
   for (const [cell, ref] of pairs) {
     cell.media = ref;
     const o = oldByRef.get(ref);
-    if (o && !used.has(o.id)) { cell.id = o.id; cell.fill = o.fill; cell.corner = o.corner; cell.locked = o.locked; used.add(o.id); }
+    if (o && !used.has(o.id)) { cell.id = o.id; cell.fill = o.fill; cell.corner = o.corner; cell.locked = o.locked; cell.text = o.text || null; used.add(o.id); }
   }
   const spare = S.boxes.map(b => b.id).filter(id => !used.has(id));
-  for (const c of readingOrder(cells)) if (!c.id) c.id = spare.shift() || uid();
+  const oldById = new Map(S.boxes.map(b => [b.id, b]));
+  for (const c of readingOrder(cells)) if (!c.id) { c.id = spare.shift() || uid(); const o = oldById.get(c.id); if (o && o.text && !c.text) c.text = o.text; }
   S.boxes = [...kept, ...cells]; G = geo();
   ui.sel = new Set([...ui.sel].filter(id => byId(id)));
   if (ui.reframe && !byId(ui.reframe)) ui.reframe = null;
 }
-const blank = r => ({ id: null, c: r.c, r: r.r, w: r.w, h: r.h, media: null, fill: null, corner: null, locked: false });
+const blank = r => ({ id: null, c: r.c, r: r.r, w: r.w, h: r.h, media: null, fill: null, corner: null, locked: false, text: null });
 function makeLayout(refs, n, scope) {
   const st = S.settings;
   let kept = scope === 'unlocked' ? S.boxes.filter(b => b.locked) : [];
@@ -1014,6 +1030,140 @@ function saveTpl() {
   setTpls(t); inp.value = ''; toast(`Saved “${name}” to templates.`);
 }
 $('#tplName').addEventListener('keydown', e => { if (e.key === 'Enter') saveTpl(); });
+
+/* ============ Text ============ */
+// One layout engine feeds the canvas view, image/video export and SVG export, so line breaks always match.
+const SYSTEM_FONTS = [
+  ['system', 'System (SF Pro)', '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif'],
+  ['helvetica', 'Helvetica Neue', '"Helvetica Neue", Helvetica, Arial, sans-serif'],
+  ['arial', 'Arial', 'Arial, Helvetica, sans-serif'],
+  ['georgia', 'Georgia', 'Georgia, "Times New Roman", serif'],
+  ['times', 'Times New Roman', '"Times New Roman", Times, serif'],
+  ['mono', 'Monospace', '"SF Mono", Menlo, Consolas, monospace'],
+];
+const WEIGHTS = [[100, 'Thin'], [200, 'Extra light'], [300, 'Light'], [400, 'Regular'], [500, 'Medium'], [600, 'Semibold'], [700, 'Bold'], [800, 'Extra bold'], [900, 'Black']];
+const TEXT_DEFAULT = { content: 'Your text', font: 'system', weight: 600, size: 56, lh: 110, ls: -1, ps: 16, pad: 40, h: 'left', v: 'top', color: '#ffffff' };
+const fonts = new Map(); // uploaded: id -> { id, name, family, buffer }
+let fontsVersion = 0;
+const fontStack = id => { const u = fonts.get(id); if (u) return `"${u.family}", sans-serif`; return (SYSTEM_FONTS.find(f => f[0] === id) || SYSTEM_FONTS[0])[2]; };
+const fontName = id => (fonts.get(id) || {}).name || (SYSTEM_FONTS.find(f => f[0] === id) || SYSTEM_FONTS[0])[1];
+const fontCSS = t => `${t.weight || 400} ${Math.max(1, t.size)}px ${fontStack(t.font)}`;
+const mctx = document.createElement('canvas').getContext('2d');
+const hasLS = 'letterSpacing' in mctx;
+function layoutText(t, w, h) {
+  const size = Math.max(1, +t.size || 1), pad = Math.max(0, +t.pad || 0), bw = Math.max(1, w - 2 * pad), bh = Math.max(1, h - 2 * pad);
+  const ls = (+t.ls || 0) / 100 * size, lh = size * (+t.lh || 100) / 100, ps = Math.max(0, +t.ps || 0);
+  mctx.font = fontCSS(t);
+  if (hasLS) mctx.letterSpacing = ls + 'px';
+  const meas = str => mctx.measureText(str).width + (hasLS ? 0 : ls * [...str].length);
+  const lines = [];
+  let y = 0;
+  String(t.content || '').split('\n').forEach((para, pi) => {
+    if (pi > 0) y += ps;
+    let cur = '';
+    const push = () => { const str = cur.replace(/\s+$/, ''); lines.push({ s: str, w: meas(str), y }); y += lh; cur = ''; };
+    const addLong = word => { // a single word wider than the box breaks by character
+      let piece = '';
+      for (const ch of [...word]) { if (piece && meas(piece + ch) > bw) { cur = piece; push(); piece = ''; } piece += ch; }
+      cur = piece;
+    };
+    for (const tk of para.match(/\S+|\s+/g) || []) {
+      if (/^\s+$/.test(tk)) { cur += tk; continue; }
+      if (meas((cur + tk).replace(/\s+$/, '')) <= bw) { cur += tk; continue; }
+      if (cur.trim()) push(); else cur = '';
+      if (meas(tk) > bw) addLong(tk); else cur = tk;
+    }
+    push();
+  });
+  const total = y;
+  const m = mctx.measureText('Hg'), asc = m.fontBoundingBoxAscent ?? size * 0.8, desc = m.fontBoundingBoxDescent ?? size * 0.2;
+  const baseOff = (lh - (asc + desc)) / 2 + asc;
+  const top = pad + (t.v === 'middle' ? (bh - total) / 2 : t.v === 'bottom' ? bh - total : 0);
+  return {
+    size, ls, lh,
+    lines: lines.map(L => ({ s: L.s, w: L.w, x: pad + (t.h === 'center' ? (bw - L.w) / 2 : t.h === 'right' ? bw - L.w : 0), y: top + L.y, base: top + L.y + baseOff })),
+  };
+}
+function drawTextCanvas(x, t, w, h) {
+  if (!t || !t.content) return;
+  const L = layoutText(t, w, h);
+  x.save();
+  x.font = fontCSS(t); x.fillStyle = t.color || '#fff'; x.textBaseline = 'alphabetic'; x.textAlign = 'left';
+  if (hasLS) x.letterSpacing = L.ls + 'px';
+  for (const l of L.lines) {
+    if (!l.s) continue;
+    if (hasLS || !L.ls) x.fillText(l.s, l.x, l.base);
+    else { let cx = l.x; for (const ch of [...l.s]) { x.fillText(ch, cx, l.base); cx += x.measureText(ch).width + L.ls; } }
+  }
+  x.restore();
+}
+function textHTML(t, w, h) {
+  // SVG text sits on an exact baseline, the same coordinate the canvas export uses, so every font lines up identically.
+  const L = layoutText(t, w, h), font = escapeHtml(fontCSS(t));
+  const rows = L.lines.map(l => l.s ? `<text x="${f2(l.x)}" y="${f2(l.base)}" xml:space="preserve">${escapeHtml(l.s)}</text>` : '').join('');
+  return `<svg class="tsvg" width="${f2(w)}" height="${f2(h)}" style="font:${font};letter-spacing:${f2(L.ls)}px" fill="${escapeHtml(t.color || '#fff')}">${rows}</svg>`;
+}
+/* uploaded fonts are kept in IndexedDB so they survive a reload */
+function fontDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('bento-studio-fonts', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('fonts', { keyPath: 'id' });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function registerFont(rec) {
+  const ff = new FontFace(rec.family, rec.buffer);
+  await ff.load(); document.fonts.add(ff); fonts.set(rec.id, rec);
+}
+async function loadStoredFonts() {
+  try {
+    const db = await fontDB();
+    const all = await new Promise(res => { const q = db.transaction('fonts').objectStore('fonts').getAll(); q.onsuccess = () => res(q.result || []); q.onerror = () => res([]); });
+    for (const rec of all) { try { await registerFont(rec); } catch (e) {} }
+    if (all.length) { fontsVersion++; selSig = ''; render(); }
+  } catch (e) {}
+}
+async function uploadFonts(files) {
+  let last = null;
+  for (const f of files) {
+    const id = 'f' + uid(), name = f.name.replace(/\.(ttf|otf|woff2?)$/i, ''), rec = { id, name, family: 'BentoFont-' + id, buffer: await f.arrayBuffer() };
+    try {
+      await registerFont(rec); last = id;
+      try { const db = await fontDB(); db.transaction('fonts', 'readwrite').objectStore('fonts').put(rec); } catch (e) {}
+    } catch (e) { toast(`Couldn’t read ${f.name}. Use a TTF, OTF, WOFF or WOFF2 file.`); }
+  }
+  if (!last) return;
+  const targets = [...ui.sel].map(byId).filter(b => b && b.text);
+  targets.forEach(b => { b.text.font = last; });
+  ui.textStyle = { ...(ui.textStyle || {}), font: last };
+  fontsVersion++; selSig = '';
+  if (targets.length) commit();
+  render();
+  toast(files.length > 1 ? `Added ${files.length} fonts.` : `Added ${fontName(last)}.`);
+}
+async function removeFont(id) {
+  fonts.delete(id);
+  try { const db = await fontDB(); db.transaction('fonts', 'readwrite').objectStore('fonts').delete(id); } catch (e) {}
+  S.boxes.forEach(b => { if (b.text && b.text.font === id) b.text.font = 'system'; });
+  fontsVersion++; selSig = ''; commit(); render();
+}
+$('#fontPick').addEventListener('change', e => { if (e.target.files.length) uploadFonts([...e.target.files]); e.target.value = ''; });
+if (document.fonts) document.fonts.addEventListener('loadingdone', () => { fontsVersion++; if (typeof render === 'function' && initialized) render({ animate: false }); });
+function defaultTextFor(b) {
+  const fill = b.fill || S.settings.cell;
+  const style = { ...TEXT_DEFAULT, ...(ui.textStyle || {}) };
+  if (!ui.textStyle || !ui.textStyle.color) style.color = lum(fill) > 0.55 ? '#111111' : '#ffffff';
+  return { ...style, content: TEXT_DEFAULT.content };
+}
+function addText() {
+  const boxes = [...ui.sel].map(byId).filter(Boolean);
+  if (!boxes.length) return;
+  let added = 0;
+  boxes.forEach(b => { if (!b.text) { b.text = defaultTextFor(b); added++; } });
+  if (added) commit();
+  selSig = ''; render();
+  const ta = $('#txtContent'); if (ta) { ta.focus(); ta.select(); }
+}
 
 /* ============ Media ============ */
 const EXT_IMG = /\.(png|jpe?g|webp|gif|avif|bmp|svg)$/i, EXT_VID = /\.(mp4|webm|mov|m4v|ogv)$/i;
@@ -1133,8 +1283,8 @@ function makeCell(id) {
   const el = document.createElement('div');
   el.className = 'cell' + (initialized ? ' enter' : '');
   el.dataset.id = id; el._id = id;
-  el.innerHTML = `<div class="surface"><div class="empty">${EMPTY_ICON}<span>Drop image or video</span></div></div><div class="badge"></div><div class="lockb">${I.lock}</div>`;
-  el._surface = el.firstChild; el._empty = el._surface.firstChild; el._badge = el.children[1];
+  el.innerHTML = `<div class="surface"><div class="empty">${EMPTY_ICON}<span>Drop image or video</span></div><div class="tlayer"></div></div><div class="badge"></div><div class="lockb">${I.lock}</div>`;
+  el._surface = el.firstChild; el._empty = el._surface.firstChild; el._tlayer = el._surface.lastChild; el._badge = el.children[1];
   if (initialized) setTimeout(() => el.classList.remove('enter'), 400);
   return el;
 }
@@ -1158,6 +1308,8 @@ function paint(el, r) {
   const b = el._box, style = styleOf(b);
   const key = `${Math.round(r.w * 4)}|${Math.round(r.h * 4)}|${cornerSig}|${style}`;
   if (el._ck !== key) { el._ck = key; el._surface.style.clipPath = `path("${cellD(style, r.w, r.h)}")`; }
+  const tk = b && b.text && b.text.content ? `${Math.round(r.w)}|${Math.round(r.h)}|${fontsVersion}|${JSON.stringify(b.text)}` : '';
+  if (el._tk !== tk) { el._tk = tk; el._tlayer.innerHTML = tk ? textHTML(b.text, r.w, r.h) : ''; }
   if (b && b.media && el._mediaEl) {
     const m = media.get(b.media.id);
     if (m && m.el === el._mediaEl) {
@@ -1206,6 +1358,7 @@ function syncCells(animate, dur) {
     syncMedia(el, b);
     el.classList.toggle('reframing', ui.reframe === b.id);
     el.classList.toggle('locked', !!b.locked);
+    el.classList.toggle('has-text', !!(b.text && b.text.content));
     const r = rectOf(b);
     if (st.labels) el._badge.textContent = `${idx.get(b.id) + 1}  ${b.w}×${b.h}`;
     el._empty.classList.toggle('tiny', r.w * V.s < 120 || r.h * V.s < 70);
@@ -1361,6 +1514,7 @@ function hudHTML() {
     <button data-act="split-rows" title="Split into ${n} rows">${I.rows}</button><span class="sep"></span>
     <button data-act="media-add" title="${b && b.media ? 'Replace media' : 'Add image or video'}">${I.image}</button>
     ${b && b.media ? `<button data-act="reframe" title="Reframe media (double-click)">${I.crop}</button>` : ''}
+    <button data-act="text-add" title="${b && b.text ? 'Edit text' : 'Add text'} (T)">${I.text}</button>
     ${lockBtn}<span class="sep"></span><button data-act="delete" class="danger" title="Delete (⌫)">${I.trash}</button>`;
 }
 function placeHud() {
@@ -1469,6 +1623,7 @@ function setCanvasSize(w, h) {
   if (st.scaleSpacing) {
     const k = Math.max(w, h) / Math.max(st.cw, st.ch);
     for (const key of ['gapX', 'gapY', 'pad', 'radius']) st[key] = Math.round(st[key] * k);
+    S.boxes.forEach(b => { if (b.text) for (const key of ['size', 'pad', 'ps']) b.text[key] = Math.round(b.text[key] * k); });
   }
   st.cw = w; st.ch = h; ui.zoom = 'fit';
   commit(); render({ all: true, animate: false });
@@ -1501,7 +1656,7 @@ function renderSelectionPanel() {
   const sec = $('#selSec'), ids = [...ui.sel];
   if (!ids.length) { sec.hidden = true; selSig = ''; return; }
   const boxes = ids.map(byId).filter(Boolean), single = boxes.length === 1 ? boxes[0] : null;
-  const sig = ids.join() + '|' + boxes.map(b => [b.media && b.media.id, b.fill, b.w, b.h, b.corner, b.locked].join()).join(';') + '|' + ui.splitN + '|' + ui.reframe + '|' + S.settings.cell;
+  const sig = ids.join() + '|' + boxes.map(b => [b.media && b.media.id, b.fill, b.w, b.h, b.corner, b.locked, !!b.text, b.text && b.text.h, b.text && b.text.v, b.text && b.text.font, b.text && b.text.weight].join()).join(';') + '|' + ui.splitN + '|' + ui.reframe + '|' + S.settings.cell + '|' + fontsVersion;
   if (sig === selSig) { const sz = $('#selSize'); if (sz && single) { const r = rectOf(single); sz.textContent = `${Math.round(r.w)} × ${Math.round(r.h)} px`; } return; }
   selSig = sig; sec.hidden = false;
   const same = k => boxes.every(b => b[k] === boxes[0][k]) ? boxes[0][k] : null;
@@ -1530,12 +1685,82 @@ function renderSelectionPanel() {
   } else {
     html += `<div class="group"><div class="row"><button class="btn full" data-act="merge">${I.merge}Merge into one cell</button></div></div>`;
   }
+  html += textPanelHTML(boxes, single);
   html += `<div class="group"><div class="row"><button class="btn full danger" data-act="delete">${single ? 'Delete cell' : `Delete ${boxes.length} cells`}</button></div></div>`;
   sec.innerHTML = html;
+  fillTextPanel(boxes);
   $('#selCorner').value = corner;
   const zr = $('#selZoom'); if (zr) paintRange(zr);
 }
+function textPanelHTML(boxes, single) {
+  const withText = boxes.filter(b => b.text);
+  if (!withText.length) return `<div class="group"><div class="row"><button class="btn full" data-act="text-add">${I.text}${single ? 'Add text' : `Add text to ${boxes.length} cells`}</button></div></div>`;
+  const t = withText[0].text;
+  const fontOpts = SYSTEM_FONTS.map(([id, n]) => `<option value="${id}">${n}</option>`).join('') +
+    (fonts.size ? `<optgroup label="Uploaded">${[...fonts.values()].map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('')}</optgroup>` : '') +
+    `<option value="__upload">Upload font…</option>`;
+  const segBtn = (key, v, icon, title) => `<button data-v="${v}" title="${title}" aria-label="${title}" aria-pressed="${t[key] === v}">${icon}</button>`;
+  return `<div class="group" id="textGroup">
+    ${single ? `<div class="row stack"><textarea id="txtContent" class="text-area" rows="3" placeholder="Type here. Enter starts a new paragraph." spellcheck="false">${escapeHtml(t.content)}</textarea></div>`
+      : `<div class="note">Style changes apply to all ${withText.length} selected cells with text.${withText.length < boxes.length ? ' <button class="btn plain" data-act="text-add" style="height:22px;padding:0 6px;color:var(--accent)">Add to the rest</button>' : ''}</div>`}
+    <div class="fields">
+      <label class="field"><span>Font</span><select class="select" data-t="font">${fontOpts}</select></label>
+      <label class="field"><span>Weight</span><select class="select" data-t="weight">${WEIGHTS.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label>
+      <label class="field"><span>Size (px)</span><input class="num" type="number" min="4" max="4000" step="1" data-t="size"></label>
+      <div class="field"><span>Color</span><div class="inline"><input type="color" data-t="color" aria-label="Text color"><span class="hex" id="tHex" style="text-align:left"></span></div></div>
+      <label class="field"><span>Line height (%)</span><input class="num" type="number" min="50" max="400" step="1" data-t="lh"></label>
+      <label class="field"><span>Letter spacing (%)</span><input class="num" type="number" min="-50" max="200" step="0.5" data-t="ls"></label>
+      <label class="field"><span>Paragraph spacing (px)</span><input class="num" type="number" min="0" max="4000" step="1" data-t="ps"></label>
+      <label class="field"><span>Padding (px)</span><input class="num" type="number" min="0" max="4000" step="1" data-t="pad"></label>
+    </div>
+    <div class="row"><span class="lbl">Align</span><div class="seg icons" data-tseg="h">${segBtn('h', 'left', I.alignL, 'Align left')}${segBtn('h', 'center', I.alignC, 'Align center')}${segBtn('h', 'right', I.alignR, 'Align right')}</div></div>
+    <div class="row"><span class="lbl">Position</span><div class="seg icons" data-tseg="v">${segBtn('v', 'top', I.vTop, 'Top')}${segBtn('v', 'middle', I.vMid, 'Middle')}${segBtn('v', 'bottom', I.vBot, 'Bottom')}</div></div>
+    <div class="row"><div class="actions grow">${fonts.has(t.font) ? '<button class="btn" data-act="font-remove" title="Remove this uploaded font from the app">Remove font</button>' : ''}<button class="btn" data-act="text-remove">Remove text</button></div></div>
+  </div>`;
+}
+function fillTextPanel(boxes) {
+  const t = (boxes.find(b => b.text) || {}).text; if (!t) return;
+  $$('[data-t]', selSec).forEach(el => { if (document.activeElement !== el) el.value = t[el.dataset.t]; });
+  const hx = $('#tHex'); if (hx) hx.textContent = String(t.color).toUpperCase();
+}
+let textCommitT = 0;
+function applyTextStyle(key, val, done) {
+  const boxes = [...ui.sel].map(byId).filter(b => b && b.text);
+  boxes.forEach(b => { b.text[key] = val; });
+  const t = boxes[0] && boxes[0].text;
+  if (t) { const { content, ...style } = t; ui.textStyle = style; }
+  syncCells(false); drawOverlay();
+  if (key === 'color') { const hx = $('#tHex'); if (hx) hx.textContent = String(val).toUpperCase(); }
+  if (done) commit();
+}
 const selSec = $('#selSec');
+selSec.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id === 'txtContent') {
+    const b = byId([...ui.sel][0]); if (!b || !b.text) return;
+    b.text.content = el.value; syncCells(false);
+    clearTimeout(textCommitT); textCommitT = setTimeout(commit, 700);
+  } else if (el.dataset.t && el.tagName === 'INPUT') {
+    const k2 = el.dataset.t;
+    if (k2 === 'color') applyTextStyle(k2, el.value, false);
+    else { const v = parseFloat(el.value); if (!isNaN(v)) applyTextStyle(k2, v, false); }
+  }
+});
+selSec.addEventListener('change', e => {
+  const el = e.target;
+  if (el.id === 'txtContent') { clearTimeout(textCommitT); commit(); return; }
+  if (!el.dataset.t) return;
+  const k2 = el.dataset.t;
+  if (k2 === 'font' && el.value === '__upload') { $('#fontPick').click(); fillTextPanel([...ui.sel].map(byId).filter(Boolean)); return; }
+  if (k2 === 'font') { applyTextStyle(k2, el.value, true); selSig = ''; render(); return; }
+  if (k2 === 'weight') { applyTextStyle(k2, +el.value, true); return; }
+  if (k2 === 'color') { applyTextStyle(k2, el.value, true); return; }
+  const v = parseFloat(el.value); if (!isNaN(v)) applyTextStyle(k2, v, true);
+});
+selSec.addEventListener('click', e => {
+  const sb = e.target.closest('[data-tseg] button'); if (!sb) return;
+  applyTextStyle(sb.closest('[data-tseg]').dataset.tseg, sb.dataset.v, true); selSig = ''; render();
+});
 selSec.addEventListener('click', e => {
   const sb = e.target.closest('#splitStep button');
   if (sb) { ui.splitN = clamp(ui.splitN + +sb.dataset.d, 2, 8); render(); return; }
@@ -1588,12 +1813,13 @@ function setHint(mode) {
   const k = s => `<kbd>${s}</kbd>`;
   const H = {
     '': [playVideos && playVideos().length ? `Tap ${k('Space')} to play or pause` : null, `Hold ${k('Space')} and drag to pan`, `Drop images or videos anywhere`, `Drag a cell to move it`, `Drop onto another cell to swap`, `Hold ${k(ALT)} while dropping to merge`, `${k(SHIFT)}-click to select several, then drag them together`],
-    move: [`Drop on empty space to move`, `Drop onto a cell to swap`, `Hold ${k(ALT)} to merge instead`],
-    swap: [`Release to swap these cells`, `Hold ${k(ALT)} to merge instead`],
-    swapMedia: [`Release to swap media only`, `Hold ${k(ALT)} to merge instead`],
+    move: [`Drop anywhere: cells in the way move aside`, `Hold ${k(ALT)} over a cell to merge`],
+    trade: [`Release to trade places with this cell`, `Sizes are exchanged because the cells can't fit otherwise`],
+    swap: [`Release to place it here`, `The cells in the way keep their size and move into the free space`],
+    swapMedia: [`Release to swap media and text only`, `Hold ${k(ALT)} to merge instead`],
     merge: [`Release to merge`, `The merged cell keeps this cell's media`, `Let go of ${k(ALT)} to swap instead`],
     resize: [`Snaps to the grid`, `Hold ${k(SHIFT)} to resize neighbours with it`],
-    groupMove: [`Moving all selected cells together`, `They keep their arrangement and snap to the grid`],
+    groupMove: [`Moving all selected cells together`, `Cells in the way move into the free space`],
     group: [`Resizing every selected cell by the same amount`],
     draw: [`Release to create the cell`],
     files: [`Release to place`, `Several files are matched to cell shapes automatically`],
@@ -1711,56 +1937,127 @@ function beginMove() {
   ui.reframe = null; stage.style.cursor = 'grabbing';
   applyArtboard(); syncCells(true); drawGuides();
 }
+/* Displacement: the dragged cells take the drop position; cells in the way keep their size and move into the space
+   that was freed, first as one rigid block (a true swap), then one by one into the nearest free spot. */
+function planDisplace(group, dc, dr) {
+  const st = S.settings, gset = new Set(group.map(g => g.id));
+  const T = group.map(g => ({ id: g.id, c: g.c + dc, r: g.r + dr, w: g.w, h: g.h }));
+  if (T.some(t => !inBounds(t))) return null;
+  const moves = new Map(T.map(t => [t.id, { c: t.c, r: t.r }]));
+  const others = S.boxes.filter(o => !gset.has(o.id));
+  const O = others.filter(o => T.some(t => overlaps(o, t)));
+  if (!O.length) return { moves, displaced: [] };
+  if (O.some(o => o.locked)) return null; // locked cells never get pushed
+  const oset = new Set(O.map(o => o.id)), blocks = [...T, ...others.filter(o => !oset.has(o.id))];
+  const free = (cand, placed) => inBounds(cand) && !blocks.some(x => overlaps(x, cand)) && !placed.some(x => overlaps(x, cand));
+  const bbox = list => { const c = Math.min(...list.map(x => x.c)), r = Math.min(...list.map(x => x.r)); return { c, r, w: Math.max(...list.map(x => x.c + x.w)) - c, h: Math.max(...list.map(x => x.r + x.h)) - r }; };
+  const Ob = bbox(O), Db = bbox(group);
+  const vecs = [[-dc, -dr], [Db.c - Ob.c, Db.r - Ob.r], [Db.c + Db.w - Ob.c - Ob.w, Db.r - Ob.r], [Db.c - Ob.c, Db.r + Db.h - Ob.r - Ob.h], [Db.c + Db.w - Ob.c - Ob.w, Db.r + Db.h - Ob.r - Ob.h]];
+  for (const [vx, vy] of vecs) {
+    const placed = [];
+    let ok = true;
+    for (const o of O) { const m = { id: o.id, c: o.c + vx, r: o.r + vy, w: o.w, h: o.h }; if (!free(m, placed)) { ok = false; break; } placed.push(m); }
+    if (ok) { placed.forEach(m => moves.set(m.id, { c: m.c, r: m.r })); return { moves, displaced: O }; }
+  }
+  const placed = [];
+  for (const o of [...O].sort((x, y) => y.w * y.h - x.w * x.h)) {
+    const pc = o.c - dc, pr = o.r - dr;
+    let best = null, bd = Infinity;
+    for (let r = 0; r <= st.mr - o.h; r++) for (let c = 0; c <= st.mc - o.w; c++) {
+      const d = Math.abs(c - pc) + Math.abs(r - pr);
+      if (d >= bd) continue;
+      const cand = { c, r, w: o.w, h: o.h };
+      if (free(cand, placed)) { best = cand; bd = d; }
+    }
+    if (!best) return null;
+    placed.push({ id: o.id, ...best }); moves.set(o.id, { c: best.c, r: best.r });
+  }
+  return { moves, displaced: O };
+}
+// Slide pushed-aside cells to where they would land, live, while dragging.
+function previewDisplaced(plan) {
+  const now = new Set();
+  if (plan) for (const o of plan.displaced) {
+    now.add(o.id);
+    const el = cellEls.get(o.id), to = plan.moves.get(o.id);
+    if (el && to) setTarget(el, rectOf({ ...o, c: to.c, r: to.r }), true, 200);
+  }
+  for (const id of drag.previewed || []) {
+    if (now.has(id)) continue;
+    const el = cellEls.get(id), box = byId(id);
+    if (el && box) setTarget(el, rectOf(box), true, 200);
+  }
+  drag.previewed = now;
+}
+function showPlan(plan, targets, lead, label) {
+  ghosts = []; chips = [];
+  if (!plan) {
+    targets.forEach(t => ghosts.push({ r: rectOf(t), cls: 'bad', box: t.box }));
+    chips.push({ r: rectOf(lead), text: 'No room here', cls: 'bad' });
+    return;
+  }
+  targets.forEach(t => ghosts.push({ r: rectOf(t), cls: '', box: t.box }));
+  if (plan.displaced.length) chips.push({ r: rectOf(lead), text: `${label} · moves ${plan.displaced.length} cell${plan.displaced.length > 1 ? 's' : ''}` });
+  else if (targets.length > 1) chips.push({ r: rectOf(lead), text: label });
+}
 function updateGroupMove(e) {
   const p = toL(e), st = S.settings, dx = p.x - drag.p0.x, dy = p.y - drag.p0.y, gb = drag.bounds;
   for (const m of drag.members) { const vr = { x: m.r0.x + dx, y: m.r0.y + dy, w: m.r0.w, h: m.r0.h }; m.el._cur = vr; paint(m.el, vr); }
   const dc = clamp(Math.round(dx / G.sx), -gb.c0, st.mc - gb.c1), dr = clamp(Math.round(dy / G.sy), -gb.r0, st.mr - gb.r1);
-  const moved = drag.members.map(m => ({ c: m.c + dc, r: m.r + dr, w: m.w, h: m.h, box: byId(m.id) }));
-  const ok = moved.every(c => !S.boxes.some(o => !drag.group.has(o.id) && overlaps(o, c)));
-  drag.plan = ok && (dc || dr) ? { mode: 'group', dc, dr } : null;
-  ghosts = []; chips = [];
+  const group = drag.members.map(m => byId(m.id));
+  const plan = dc || dr ? planDisplace(group, dc, dr) : null;
+  drag.plan = plan ? { mode: 'place', moves: plan.moves } : null;
+  previewDisplaced(plan);
   if (dc || dr) {
-    moved.forEach(c => ghosts.push({ r: rectOf(c), cls: ok ? '' : 'bad', box: c.box }));
-    const lead = rectOf(moved.find(c => c.box.id === drag.id));
-    chips.push({ r: lead, text: ok ? `Move ${moved.length} cells` : 'No room here', cls: ok ? '' : 'bad' });
-  }
+    const targets = group.map(g => ({ c: g.c + dc, r: g.r + dr, w: g.w, h: g.h, box: g }));
+    showPlan(plan, targets, targets.find(t => t.box.id === drag.id), `Move ${group.length} cells`);
+  } else { ghosts = []; chips = []; }
+  drag.hint = 'groupMove';
   setHint(); drawOverlay();
 }
 function updateMove(e) {
   if (drag.group) { updateGroupMove(e); return; }
-  const p = toL(e), b = byId(drag.id), r = rectOf(b);
+  const p = toL(e), b = byId(drag.id), r = rectOf(b), st = S.settings;
   const vr = { x: p.x - drag.gdx, y: p.y - drag.gdy, w: r.w, h: r.h };
   drag.el._cur = vr; paint(drag.el, vr);
   const t = hit(p.x, p.y, drag.id);
-  ghosts = []; chips = [];
-  if (t) {
-    if (keys.alt) {
-      const m = mergeSet([drag.id, t.id]), gr = rectOf(m.rect);
-      drag.plan = { mode: 'merge', target: t.id };
-      ghosts.push({ r: gr, cls: 'merge', box: b });
-      chips.push({ r: gr, text: m.ids.size > 2 ? `Merge ${m.ids.size} cells` : 'Merge', cls: 'merge' });
-      drag.hint = 'merge';
-    } else if (S.settings.swapMedia) {
-      drag.plan = { mode: 'swap-media', target: t.id };
-      ghosts.push({ r: rectOf(t), cls: '', box: t });
-      chips.push({ r: rectOf(t), text: b.media && !t.media ? 'Move media here' : 'Swap media' });
-      drag.hint = 'swapMedia';
-    } else {
-      drag.plan = { mode: 'swap', target: t.id };
-      ghosts.push({ r: rectOf(t), cls: '', box: t }, { r, cls: 'dim', box: b });
-      chips.push({ r: rectOf(t), text: 'Swap' });
-      drag.hint = 'swap';
-    }
+  if (t && keys.alt) {
+    previewDisplaced(null);
+    const m = mergeSet([drag.id, t.id]), gr = rectOf(m.rect);
+    drag.plan = { mode: 'merge', target: t.id };
+    ghosts = [{ r: gr, cls: 'merge', box: b }];
+    chips = [{ r: gr, text: m.ids.size > 2 ? `Merge ${m.ids.size} cells` : 'Merge', cls: 'merge' }];
+    drag.hint = 'merge';
+  } else if (t && S.settings.swapMedia) {
+    previewDisplaced(null);
+    drag.plan = { mode: 'swap-media', target: t.id };
+    ghosts = [{ r: rectOf(t), cls: '', box: t }];
+    chips = [{ r: rectOf(t), text: (b.media || b.text) && !(t.media || t.text) ? 'Move content here' : 'Swap content' }];
+    drag.hint = 'swapMedia';
   } else {
-    const st = S.settings;
     const nc = clamp(Math.round((vr.x - G.pad) / G.sx), 0, st.mc - b.w), nr = clamp(Math.round((vr.y - G.pad) / G.sy), 0, st.mr - b.h);
-    const cand = { c: nc, r: nr, w: b.w, h: b.h }, ok = fits(cand, new Set([b.id]));
-    drag.plan = ok ? { mode: 'move', c: nc, r: nr } : null;
-    if (nc !== b.c || nr !== b.r) {
-      ghosts.push({ r: rectOf(cand), cls: ok ? '' : 'bad', box: b });
-      if (!ok) chips.push({ r: rectOf(cand), text: 'No room here', cls: 'bad' });
+    const dc = nc - b.c, dr = nr - b.r;
+    let plan = dc || dr ? planDisplace([b], dc, dr) : null;
+    const target = { c: nc, r: nr, w: b.w, h: b.h, box: b };
+    if (plan) {
+      drag.plan = { mode: 'place', moves: plan.moves };
+      previewDisplaced(plan);
+      showPlan(plan, [target], target, 'Swap');
+      drag.hint = plan.displaced.length ? 'swap' : 'move';
+    } else if (t && !t.locked) {
+      // nothing fits cleanly: fall back to trading places with the cell under the pointer
+      previewDisplaced(null);
+      drag.plan = { mode: 'swap', target: t.id };
+      ghosts = [{ r: rectOf(t), cls: '', box: t }, { r, cls: 'dim', box: b }];
+      chips = [{ r: rectOf(t), text: 'Trade places' }];
+      drag.hint = 'trade';
+    } else {
+      previewDisplaced(null);
+      drag.plan = null;
+      ghosts = []; chips = [];
+      if (dc || dr) showPlan(null, [target], target, '');
+      drag.hint = 'move';
     }
-    drag.hint = 'move';
   }
   setHint(); drawOverlay();
 }
@@ -1769,10 +2066,9 @@ function endMove(d) {
   if (d.members) d.members.forEach(m => m.el.classList.remove('lifted'));
   const b = byId(d.id), pl = d.plan;
   if (b && pl) {
-    if (pl.mode === 'group') { d.group.forEach(id => { const x = byId(id); if (x) { x.c += pl.dc; x.r += pl.dr; } }); }
-    else if (pl.mode === 'move') { b.c = pl.c; b.r = pl.r; }
+    if (pl.mode === 'place') { for (const [id, to] of pl.moves) { const x = byId(id); if (x) { x.c = to.c; x.r = to.r; } } }
     else if (pl.mode === 'swap') { const t = byId(pl.target); if (t) { const tmp = { c: b.c, r: b.r, w: b.w, h: b.h }; Object.assign(b, { c: t.c, r: t.r, w: t.w, h: t.h }); Object.assign(t, tmp); } }
-    else if (pl.mode === 'swap-media') { const t = byId(pl.target); if (t && (b.media || t.media)) { [b.media, t.media] = [t.media, b.media]; if (t.media) { ui.sel = new Set([t.id]); ui.anchor = t.id; } } }
+    else if (pl.mode === 'swap-media') { const t = byId(pl.target); if (t && (b.media || t.media || b.text || t.text)) { [b.media, t.media] = [t.media, b.media]; [b.text, t.text] = [t.text, b.text]; ui.sel = new Set([t.id]); ui.anchor = t.id; } }
     else if (pl.mode === 'merge') { const n = doMerge([d.id, pl.target], d.id); if (n > 2) toast(`Merged ${n} cells.`); }
   }
   fineEnd(d.fine, d.before);
@@ -1824,6 +2120,7 @@ stage.addEventListener('dblclick', e => {
   if (e.target.closest('.hud,.handle')) return;
   const p = toL(e), b = hit(p.x, p.y); if (!b) return;
   if (b.media) { ui.reframe = ui.reframe === b.id ? null : b.id; ui.sel = new Set([b.id]); ui.anchor = b.id; render(); }
+  else if (b.text) { ui.sel = new Set([b.id]); ui.anchor = b.id; render(); const ta = $('#txtContent'); if (ta) { ta.focus(); } }
   else pickMedia(b.id);
 });
 let wheelT = 0;
@@ -1873,7 +2170,10 @@ window.addEventListener('drop', e => {
   if (!hasFiles(e)) return;
   e.preventDefault();
   const onStage = stage.contains(e.target), p = toL(e), b = onStage ? hit(p.x, p.y) : null;
-  clearFileDrag(); assignFiles(e.dataTransfer.files, b ? b.id : null);
+  clearFileDrag();
+  const all = [...e.dataTransfer.files], fontFiles = all.filter(f => /\.(ttf|otf|woff2?)$/i.test(f.name)), rest = all.filter(f => !fontFiles.includes(f));
+  if (fontFiles.length) uploadFonts(fontFiles);
+  if (rest.length) assignFiles(rest, b ? b.id : null);
 });
 document.addEventListener('paste', e => {
   const files = [...(e.clipboardData ? e.clipboardData.files : [])];
@@ -1913,6 +2213,9 @@ const actions = {
   'split-rows': () => { if (ui.sel.size === 1) { ui.splitPreview = null; split([...ui.sel][0], 'rows', ui.splitN); } },
   merge: mergeSel, delete: deleteSel, lock: toggleLock,
   'media-add': () => pickMedia([...ui.sel][0]), 'media-pick': () => pickMedia(null), 'fit-media': fitMediaToCells,
+  'text-add': addText,
+  'text-remove': () => { ui.sel.forEach(id => { const b = byId(id); if (b) b.text = null; }); selSig = ''; commit(); render(); },
+  'font-remove': () => { const b = [...ui.sel].map(byId).find(x => x && x.text); if (b && fonts.has(b.text.font)) removeFont(b.text.font); },
   'media-remove': () => { const b = byId([...ui.sel][0]); if (b) { b.media = null; ui.reframe = null; commit(); render(); } },
   reframe: () => { const id = [...ui.sel][0]; ui.reframe = ui.reframe ? null : (byId(id) && byId(id).media ? id : null); render(); },
   'reframe-reset': () => { const b = byId(ui.reframe); if (b && b.media) { Object.assign(b.media, { zoom: 1, px: 0, py: 0 }); setZoom(b, 1); commit(); render(); } },
@@ -1955,6 +2258,7 @@ window.addEventListener('keydown', e => {
   else if (mod && k === 'a') { e.preventDefault(); ui.sel = new Set(S.boxes.map(b => b.id)); render(); }
   else if (!mod && k === 'm') mergeSel();
   else if (!mod && k === 'l') toggleLock();
+  else if (!mod && k === 't') { e.preventDefault(); addText(); }
   else if (!mod && k === 'enter') actions.reframe();
   else if (e.key.startsWith('Arrow') && !mod) {
     e.preventDefault();
@@ -2105,7 +2409,12 @@ function drawComposition(x, k, opts = {}) {
     x.save(); x.translate(r.x, r.y);
     x.fillStyle = b.fill || st.cell; x.fill(path);
     const m = b.media && media.get(b.media.id);
-    if (m) { x.save(); x.clip(path); const f = frameFor(m, b.media, r.w, r.h); try { x.drawImage(m.el, f.x, f.y, f.dw, f.dh); } catch (e) {} x.restore(); }
+    if (m || (b.text && b.text.content)) {
+      x.save(); x.clip(path);
+      if (m) { const f = frameFor(m, b.media, r.w, r.h); try { x.drawImage(m.el, f.x, f.y, f.dw, f.dh); } catch (e) {} }
+      drawTextCanvas(x, b.text, r.w, r.h);
+      x.restore();
+    }
     x.restore();
   }
 }
@@ -2298,6 +2607,7 @@ function layoutModel() {
       const r = rectOf(b), m = b.media && media.get(b.media.id);
       return { index: i + 1, id: b.id, col: b.c, row: b.r, colSpan: b.w, rowSpan: b.h, x: n(r.x), y: n(r.y), width: n(r.w), height: n(r.h),
                corner: styleOf(b), fill: b.fill || st.cell, locked: !!b.locked, media: m ? { name: m.name, type: m.type } : null,
+               text: b.text && b.text.content ? { ...b.text, font: fontName(b.text.font), size: f2(b.text.size * k), padding: f2(b.text.pad * k), paragraphSpacing: f2(b.text.ps * k), lineHeightPercent: b.text.lh, letterSpacingPercent: b.text.ls, pad: undefined, ps: undefined, lh: undefined, ls: undefined } : null,
                path: cellD(styleOf(b), r.w * k, r.h * k, k), _b: b, _r: r };
     }),
   };
@@ -2342,6 +2652,24 @@ async function buildSVG() {
     out.push(`<g id="Cells">${M.cells.map(c => `<path id="Cell_${c.index}" data-name="Cell ${c.index} ${c.colSpan}x${c.rowSpan}" transform="translate(${c.x} ${c.y})" d="${c.path}" fill="${esc(c.fill)}"/>`).join('')}</g>`);
   }
   if (images.length) out.push(`<g id="Images">${images.join('')}</g>`);
+  const texts = M.cells.filter(c => c._b.text && c._b.text.content);
+  if (texts.length) {
+    const used = [...new Set(texts.map(c => c._b.text.font).filter(id => fonts.has(id)))];
+    if (used.length) {
+      const b64 = buf => { const u = new Uint8Array(buf); let s2 = ''; for (let i = 0; i < u.length; i += 32768) s2 += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s2); };
+      out.push(`<style>${used.map(id => { const f = fonts.get(id); return `@font-face{font-family:"${f.family}";src:url(data:font/ttf;base64,${b64(f.buffer)});}`; }).join('')}</style>`);
+    }
+    out.push('<g id="Text">');
+    for (const c of texts) {
+      const t = c._b.text, L = layoutText(t, c._r.w, c._r.h);
+      const fam = fonts.has(t.font) ? `'${esc(fonts.get(t.font).name)}', '${fonts.get(t.font).family}'` : esc(fontStack(t.font)).replace(/&quot;/g, "'");
+      out.push(`<clipPath id="tclip-${c.index}"><path transform="translate(${c.x} ${c.y})" d="${c.path}"/></clipPath>`);
+      out.push(`<g id="Text_${c.index}" clip-path="url(#tclip-${c.index})" font-family="${fam}" font-size="${f2(L.size * k)}" font-weight="${t.weight}" letter-spacing="${f2(L.ls * k)}" fill="${esc(t.color || '#fff')}">`);
+      L.lines.forEach(l => { if (l.s) out.push(`<text x="${f2(c.x + l.x * k)}" y="${f2(c.y + l.base * k)}" xml:space="preserve">${esc(l.s)}</text>`); });
+      out.push('</g>');
+    }
+    out.push('</g>');
+  }
   out.push('</svg>');
   return out.join('\n');
 }
@@ -2377,9 +2705,10 @@ G = geo();
 commit(); updateUndo();
 renderTpls();
 render({ all: true, animate: false });
+loadStoredFonts();
 initialized = true;
 new ResizeObserver(() => { guidesKey = ''; render({ animate: false }); }).observe(stage);
-window.__bento = { get state() { return S; }, ui, EX, buildSVG, buildJSON, render, commit, shuffle };
+window.__bento = { get state() { return S; }, ui, EX, layoutText, drawComposition, rectOf: b => rectOf(b), buildSVG, buildJSON, render, commit, shuffle };
 })();
 </script>
 </body>
