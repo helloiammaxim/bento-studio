@@ -136,6 +136,15 @@ input[type=color]::-moz-color-swatch{border:none;border-radius:50%}
 .tpl-tile .del{position:absolute;top:-6px;right:-6px;width:17px;height:17px;border-radius:50%;border:0;background:var(--danger);color:#fff;font-size:10px;line-height:17px;padding:0;cursor:pointer;display:none}
 .tpl-tile:hover .del{display:block}
 .tpl-label{font-size:11.5px;color:var(--label2);padding:0 10px}
+.tpl-empty{grid-column:1/-1;font-size:12px;color:var(--label2);padding:6px 2px}
+.look-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px}
+.look{position:relative;border-radius:9px;cursor:pointer;display:flex;flex-direction:column;gap:5px;padding:5px;background:var(--fill);transition:background .12s}
+.look:hover{background:var(--fill2)}
+.look svg{width:100%;height:auto;border-radius:5px;display:block}
+.look span{font-size:11.5px;color:var(--label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+.look .del{position:absolute;top:-6px;right:-6px;width:17px;height:17px;border-radius:50%;border:0;background:var(--danger);color:#fff;font-size:10px;line-height:17px;padding:0;cursor:pointer;display:none}
+.look:hover .del{display:block}
+.btn.confirm{background:var(--danger);color:#fff}
 
 /* artboard */
 .artboard{position:absolute;left:0;top:0;transform-origin:0 0;box-shadow:0 0 0 .5px rgba(255,255,255,.08),0 24px 70px rgba(0,0,0,.4);font-family:var(--font)}
@@ -275,6 +284,14 @@ kbd{font:500 11px var(--font);min-width:19px;height:19px;padding:0 5px;display:i
     <section class="sec" id="selSec" hidden></section>
 
     <details class="sec" open>
+      <summary>Looks</summary>
+      <div class="group">
+        <div class="look-grid" id="lookGrid"></div>
+        <div class="row"><input class="text-in" id="lookName" placeholder="Name this look" maxlength="40"><button class="btn" data-act="look-save" title="Save corners, spacing, colours and text style">Save</button></div>
+      </div>
+    </details>
+
+    <details class="sec" open>
       <summary>Canvas</summary>
       <div class="group">
         <div class="row"><label for="sizePreset">Size</label>
@@ -337,13 +354,15 @@ kbd{font:500 11px var(--font);min-width:19px;height:19px;padding:0 5px;display:i
         <div class="tpl-grid" id="tplGrid"></div>
         <div class="row"><input class="text-in" id="tplName" placeholder="Name this arrangement" maxlength="40"><button class="btn" data-act="tpl-save">Save</button></div>
         <div class="row"><div class="actions grow"><button class="btn" data-act="fill-one">Single cell</button><button class="btn danger" data-act="clear">Clear canvas</button></div></div>
+        <div class="row"><div class="actions grow"><button class="btn" data-act="tpl-delete-all" id="tplDelAll">Delete all templates</button><button class="btn" data-act="tpl-restore" id="tplRestore">Restore built-in</button></div></div>
       </div>
     </details>
 
     <details class="sec" open>
       <summary>Shuffle settings</summary>
       <div class="group">
-        <div data-slider="density" data-label="Density" data-min="0" data-max="4" data-fmt="density" data-shuffle></div>
+        <div class="row"><span class="lbl">Cells</span><div class="seg" data-seg="shuffleCount"><button data-v="filled" title="One cell per image, video or text. No empty cells are added.">Filled only</button><button data-v="same" title="Keep the current number of cells">Same count</button><button data-v="density" title="The Density slider decides, so empty cells can be added">Density</button></div></div>
+        <div data-slider="density" data-label="Density" data-min="0" data-max="4" data-fmt="density" data-shuffle id="densityRow"></div>
         <div data-slider="symmetry" data-label="Symmetry" data-min="0" data-max="100" data-unit="%" data-shuffle></div>
         <div data-slider="hero" data-label="Hero size" data-min="0" data-max="80" data-unit="%" data-fmt="hero" data-shuffle></div>
         <div class="fields">
@@ -460,7 +479,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const toRad = d => d * Math.PI / 180;
 const uid = () => 'c' + Math.random().toString(36).slice(2, 10);
 const GRID_MAX = 96;
-const STORE_KEY = 'bento-studio:v2', TPL_KEY = 'bento-studio:templates', THEME_KEY = 'bento-studio:theme';
+const STORE_KEY = 'bento-studio:v2', TPL_KEY = 'bento-studio:templates', THEME_KEY = 'bento-studio:theme', TPL_HIDDEN_KEY = 'bento-studio:hidden-templates', LOOKS_KEY = 'bento-studio:looks';
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const ALT = isMac ? '⌥' : 'Alt', MOD = isMac ? '⌘' : 'Ctrl', SHIFT = '⇧';
 const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -598,7 +617,7 @@ const DEFAULTS = {
   cornerStyle: 'smooth', radiusUnit: 'px', radius: 44, radiusPct: 20, smooth: 0.6, sq: 30,
   bgMode: 'solid', bg1: '#000000', bg2: '#2b2d42', bgAngle: 135, cell: '#1c1c1e',
   guides: true, labels: false, swapMedia: false,
-  density: 2, symmetry: 40, hero: 55, minW: 1, minH: 1, orient: 'balanced', seed: 237088, shuffleScope: 'all',
+  density: 2, symmetry: 40, hero: 55, minW: 1, minH: 1, orient: 'balanced', seed: 237088, shuffleScope: 'all', shuffleCount: 'filled',
 };
 const DENSITY = [['Minimal', 3], ['Light', 5], ['Balanced', 7], ['Busy', 10], ['Dense', 14]];
 const defaultBoxes = () => [[0,0,5,7],[5,0,4,4],[9,0,3,4],[5,4,7,3],[0,7,3,5],[3,7,5,5],[8,7,4,5]]
@@ -917,7 +936,8 @@ function finalize(cells, pairs, kept) {
     const o = oldByRef.get(ref);
     if (o && !used.has(o.id)) { cell.id = o.id; cell.fill = o.fill; cell.corner = o.corner; cell.locked = o.locked; cell.text = o.text || null; used.add(o.id); }
   }
-  const spare = S.boxes.map(b => b.id).filter(id => !used.has(id));
+  const hasText = b => !!(b.text && b.text.content);
+  const spare = [...S.boxes.filter(hasText), ...S.boxes.filter(b => !hasText(b))].map(b => b.id).filter(id => !used.has(id));
   const oldById = new Map(S.boxes.map(b => [b.id, b]));
   for (const c of readingOrder(cells)) if (!c.id) { c.id = spare.shift() || uid(); const o = oldById.get(c.id); if (o && o.text && !c.text) c.text = o.text; }
   S.boxes = [...kept, ...cells]; G = geo();
@@ -964,10 +984,16 @@ function shuffle(newSeed = true) {
   const scope = st.shuffleScope;
   const pool = scope === 'unlocked' ? S.boxes.filter(b => !b.locked) : S.boxes;
   const refs = readingOrder(pool.filter(b => b.media)).map(b => b.media);
-  let n = DENSITY[clamp(st.density | 0, 0, 4)][1];
-  if (scope === 'unlocked') {
-    const lockedArea = S.boxes.filter(b => b.locked).reduce((a, b) => a + b.w * b.h, 0);
-    n = Math.round(n * (1 - lockedArea / (st.mc * st.mr)));
+  const filled = pool.filter(b => b.media || (b.text && b.text.content)).length;
+  let n;
+  if (st.shuffleCount === 'filled' && filled) n = filled;          // exactly the cells that have content
+  else if (st.shuffleCount === 'same' && pool.length) n = pool.length; // keep today's count, empties included
+  else {
+    n = DENSITY[clamp(st.density | 0, 0, 4)][1];
+    if (scope === 'unlocked') {
+      const lockedArea = S.boxes.filter(b => b.locked).reduce((a, b) => a + b.w * b.h, 0);
+      n = Math.round(n * (1 - lockedArea / (st.mc * st.mr)));
+    }
   }
   n = Math.max(n, refs.length, 1);
   if (makeLayout(refs, n, scope)) { commit(); render({ all: true }); }
@@ -997,11 +1023,16 @@ function tplSvg(mc, mr, cells) {
     return `<rect x="${f2(x)}" y="${f2(y)}" width="${f2(Math.max(.5, w / mc * (W - 2 * p) - gp))}" height="${f2(Math.max(.5, h / mr * (H - 2 * p) - gp))}" rx="1.6" fill="currentColor" opacity=".55"/>`;
   }).join('')}</svg>`;
 }
+const getHidden = () => { try { return new Set(JSON.parse(localStorage.getItem(TPL_HIDDEN_KEY)) || []); } catch (e) { return new Set(); } };
+const setHidden = h => { try { localStorage.setItem(TPL_HIDDEN_KEY, JSON.stringify([...h])); } catch (e) {} renderTpls(); };
 function renderTpls() {
-  const saved = getTpls();
-  $('#tplGrid').innerHTML = BUILTIN.map(([name, mc, mr, cells], i) =>
-    `<div class="tpl-tile" role="button" tabindex="0" data-tpl-b="${i}" title="${name}">${tplSvg(mc, mr, cells)}</div>`).join('') +
+  const saved = getTpls(), hidden = getHidden();
+  const html = BUILTIN.map(([name, mc, mr, cells], i) => hidden.has(name) ? '' :
+    `<div class="tpl-tile" role="button" tabindex="0" data-tpl-b="${i}" title="${name}">${tplSvg(mc, mr, cells)}<button class="del" data-tplb-del="${i}" aria-label="Delete ${name}">✕</button></div>`).join('') +
     saved.map((t, i) => `<div class="tpl-tile saved" role="button" tabindex="0" data-tpl-s="${i}" title="${escapeHtml(t.name)}">${tplSvg(t.mc, t.mr, t.boxes.map(b => [b.c, b.r, b.w, b.h]))}<button class="del" data-tpl-del="${i}" aria-label="Delete ${escapeHtml(t.name)}">✕</button></div>`).join('');
+  $('#tplGrid').innerHTML = html || '<div class="tpl-empty">No templates. Save the current arrangement below.</div>';
+  $('#tplRestore').hidden = !hidden.size;
+  $('#tplDelAll').hidden = !html;
 }
 function applyTemplate(mc, mr, cells) {
   const st = S.settings;
@@ -1017,11 +1048,82 @@ function applyTemplate(mc, mr, cells) {
 $('#tplGrid').addEventListener('click', e => {
   const del = e.target.closest('[data-tpl-del]');
   if (del) { e.stopPropagation(); const t = getTpls(); t.splice(+del.dataset.tplDel, 1); setTpls(t); return; }
+  const bdel = e.target.closest('[data-tplb-del]');
+  if (bdel) { e.stopPropagation(); const h = getHidden(); h.add(BUILTIN[+bdel.dataset.tplbDel][0]); setHidden(h); return; }
   const tile = e.target.closest('.tpl-tile'); if (!tile) return;
   if (tile.dataset.tplB !== undefined) { const [, mc, mr, cells] = BUILTIN[+tile.dataset.tplB]; applyTemplate(mc, mr, cells); }
   else { const t = getTpls()[+tile.dataset.tplS]; if (t) applyTemplate(t.mc, t.mr, t.boxes.map(b => [b.c, b.r, b.w, b.h])); }
 });
 $('#tplGrid').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.tpl-tile')) { e.preventDefault(); e.target.click(); } });
+/* ---------- Looks: saved combinations of style settings ---------- */
+const LOOK_KEYS = ['cornerStyle', 'radiusUnit', 'radius', 'radiusPct', 'smooth', 'sq', 'gapX', 'gapY', 'pad', 'bgMode', 'bg1', 'bg2', 'bgAngle', 'cell'];
+const LOOK_PX = ['radius', 'gapX', 'gapY', 'pad'];
+const getLooks = () => { try { return JSON.parse(localStorage.getItem(LOOKS_KEY)) || []; } catch (e) { return []; } };
+const setLooks = l => { try { localStorage.setItem(LOOKS_KEY, JSON.stringify(l)); } catch (e) { toast('The browser blocked saving looks.'); } renderLooks(); };
+function lookSvg(look) {
+  // tiny preview: background plus three cells drawn with the look's real corner shape
+  const W = 80, H = 50, st = { ...S.settings, ...look.s }, k = W / Math.max(1, look.cw || 1920) * 3.2;
+  const old = S.settings; S.settings = st;
+  const cells = [[4, 4, 44, 42], [51, 4, 25, 19], [51, 26, 25, 20]];
+  let out = '';
+  try {
+    out = cells.map(([x, y, w, h]) => `<path transform="translate(${x} ${y})" d="${cellD(st.cornerStyle, w, h, k)}" fill="${st.cell}"/>`).join('');
+  } finally { S.settings = old; }
+  const bg = st.bgMode === 'none' ? '<rect width="80" height="50" fill="#3a3a3c"/><path d="M0 0h10v10H0zM20 0h10v10H20zM40 0h10v10H40zM60 0h10v10H60zM10 10h10v10H10zM30 10h10v10H30zM50 10h10v10H50zM70 10h10v10H70zM0 20h10v10H0zM20 20h10v10H20zM40 20h10v10H40zM60 20h10v10H60zM10 30h10v10H10zM30 30h10v10H30zM50 30h10v10H50zM70 30h10v10H70zM0 40h10v10H0zM20 40h10v10H20zM40 40h10v10H40zM60 40h10v10H60z" fill="#2a2a2c"/>'
+    : st.bgMode === 'gradient' ? `<defs><linearGradient id="lg${look.id}" gradientTransform="rotate(${st.bgAngle - 90} .5 .5)"><stop offset="0" stop-color="${st.bg1}"/><stop offset="1" stop-color="${st.bg2}"/></linearGradient></defs><rect width="80" height="50" fill="url(#lg${look.id})"/>`
+    : `<rect width="80" height="50" fill="${st.bg1}"/>`;
+  const tx = look.text ? `<text x="9" y="17" font-size="6" font-weight="${look.text.weight}" fill="${look.text.color}" style="font-family:${escapeHtml(fontStack(look.text.font))}">Aa</text>` : '';
+  return `<svg viewBox="0 0 80 50" aria-hidden="true">${bg}${out}${tx}</svg>`;
+}
+function renderLooks() {
+  const looks = getLooks();
+  $('#lookGrid').innerHTML = looks.length
+    ? looks.map((l, i) => `<div class="look" role="button" tabindex="0" data-look="${i}" title="Apply ${escapeHtml(l.name)}">${lookSvg(l)}<span>${escapeHtml(l.name)}</span><button class="del" data-look-del="${i}" aria-label="Delete ${escapeHtml(l.name)}">✕</button></div>`).join('')
+    : '<div class="tpl-empty" style="grid-column:1/-1">Set up corners, spacing and colours, then save them here as a look to reuse on any layout.</div>';
+}
+function saveLook() {
+  const inp = $('#lookName'), looks = getLooks(), name = inp.value.trim() || `Look ${looks.length + 1}`;
+  const s2 = {}; LOOK_KEYS.forEach(k => { s2[k] = S.settings[k]; });
+  const tb = S.boxes.find(b => b.text), ts = tb ? tb.text : ui.textStyle;
+  let text = null;
+  if (ts) { const { content, ...style } = ts; text = style; }
+  looks.push({ id: uid(), name, cw: G.W, ch: G.H, s: s2, text });
+  setLooks(looks); inp.value = '';
+  toast(`Saved look “${name}”${text ? ' with its text style' : ''}.`);
+}
+function applyLook(look) {
+  const st = S.settings;
+  // pixel values are rescaled when the look was saved on a different canvas size
+  const k = st.scaleSpacing ? Math.max(G.W, G.H) / Math.max(1, Math.max(look.cw || G.W, look.ch || G.H)) : 1;
+  LOOK_KEYS.forEach(key => { if (look.s[key] !== undefined) st[key] = LOOK_PX.includes(key) ? Math.round(look.s[key] * k) : look.s[key]; });
+  if (look.text) {
+    const ts = { ...look.text };
+    for (const key of ['size', 'pad', 'ps']) if (ts[key] !== undefined) ts[key] = Math.round(ts[key] * k);
+    if (ts.font && ts.font !== 'system' && !SYSTEM_FONTS.some(f => f[0] === ts.font) && !fonts.has(ts.font)) ts.font = 'system';
+    S.boxes.forEach(b => { if (b.text) Object.assign(b.text, ts); });
+    ui.textStyle = ts;
+  }
+  commit(); selSig = ''; render({ all: true, animate: false });
+  toast(`Applied “${look.name}”.`);
+}
+$('#lookGrid').addEventListener('click', e => {
+  const del = e.target.closest('[data-look-del]');
+  if (del) { e.stopPropagation(); const l = getLooks(); l.splice(+del.dataset.lookDel, 1); setLooks(l); return; }
+  const tile = e.target.closest('[data-look]'); if (!tile) return;
+  const look = getLooks()[+tile.dataset.look]; if (look) applyLook(look);
+});
+$('#lookGrid').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.look')) { e.preventDefault(); e.target.click(); } });
+$('#lookName').addEventListener('keydown', e => { if (e.key === 'Enter') saveLook(); });
+let delAllArmed = 0;
+function deleteAllTemplates(btn) {
+  if (!delAllArmed) {
+    delAllArmed = setTimeout(() => { delAllArmed = 0; btn.textContent = 'Delete all templates'; btn.classList.remove('confirm'); }, 3000);
+    btn.textContent = 'Click again to delete'; btn.classList.add('confirm'); return;
+  }
+  clearTimeout(delAllArmed); delAllArmed = 0; btn.classList.remove('confirm'); btn.textContent = 'Delete all templates';
+  setHidden(new Set(BUILTIN.map(t => t[0]))); setTpls([]);
+  toast('All templates deleted. “Restore built-in” brings the built-in ones back.');
+}
 function saveTpl() {
   const inp = $('#tplName'), name = inp.value.trim() || `Arrangement ${getTpls().length + 1}`;
   if (!S.boxes.length) { toast('Add some cells before saving a template.'); return; }
@@ -1604,6 +1706,7 @@ $$('[data-setstep]').forEach(st => {
 });
 $('#orient').addEventListener('change', e => { S.settings.orient = e.target.value; shuffle(false); });
 $('#seed').addEventListener('change', e => { S.settings.seed = clamp(parseInt(e.target.value, 10) || 1, 1, 999999); shuffle(false); });
+binders.push(() => { $('#densityRow').hidden = S.settings.shuffleCount !== 'density'; });
 binders.push(() => { $('#orient').value = S.settings.orient; $('#seed').value = S.settings.seed; });
 const cornerSel = $('#cornerStyle');
 cornerSel.innerHTML = CORNERS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
@@ -2227,7 +2330,9 @@ const actions = {
   'zoom-toggle': () => (ui.zoom === 'fit' ? viewZoom(1) : zoomFit()),
   'swap-size': () => setCanvasSize(S.settings.ch, S.settings.cw),
   theme: () => setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'),
-  'tpl-save': saveTpl,
+  'tpl-save': saveTpl, 'look-save': saveLook,
+  'tpl-delete-all': btn => deleteAllTemplates(btn),
+  'tpl-restore': () => { setHidden(new Set()); toast('Built-in templates restored.'); },
   'dur-auto': () => { EX.durAuto = true; syncExport(); },
   'export-open': openExport, 'export-close': closeExport, 'export-run': runExport, 'copy-svg': copySvg,
   'export-cancel': () => { exportCancel = true; },
@@ -2710,6 +2815,7 @@ setTheme(theme);
 G = geo();
 commit(); updateUndo();
 renderTpls();
+renderLooks();
 render({ all: true, animate: false });
 loadStoredFonts();
 initialized = true;
