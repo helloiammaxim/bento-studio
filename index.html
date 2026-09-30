@@ -412,7 +412,7 @@ kbd{font:500 11px var(--font);min-width:19px;height:19px;padding:0 5px;display:i
         <div class="fields">
           <label class="field"><span>Format</span><select class="select" data-ex="vidFmt"><option value="mp4">MP4 (H.264)</option><option value="webm">WebM (VP9)</option></select></label>
           <label class="field"><span>Resolution</span><select class="select" data-ex="vidRes"><option value="canvas" id="vidResCanvas">Canvas size</option><option value="1920">1K · 1920</option><option value="2560">2K · 2560</option><option value="3840">4K · 3840</option></select></label>
-          <label class="field"><span>Length (seconds)</span><input class="num" type="number" min="1" max="120" step="1" data-ex="dur"></label>
+          <div class="field"><span>Length (seconds)</span><div class="inline"><input class="num" type="number" min="0.1" max="120" step="0.1" data-ex="dur" aria-label="Length in seconds" style="flex:1;width:auto;min-width:0"><button class="btn" data-act="dur-auto" id="durAuto" title="Match the longest video">Auto</button></div></div>
           <div class="field"><span>Frame rate</span><div class="seg" data-ex="fps"><button data-v="24">24</button><button data-v="25">25</button><button data-v="30">30</button><button data-v="60">60</button></div></div>
         </div>
         <div class="field"><span>Quality</span><div class="slider-line"><input type="range" min="10" max="100" data-ex="vq"><span class="value" id="vqV"></span></div></div>
@@ -2228,6 +2228,7 @@ const actions = {
   'swap-size': () => setCanvasSize(S.settings.ch, S.settings.cw),
   theme: () => setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'),
   'tpl-save': saveTpl,
+  'dur-auto': () => { EX.durAuto = true; syncExport(); },
   'export-open': openExport, 'export-close': closeExport, 'export-run': runExport, 'copy-svg': copySvg,
   'export-cancel': () => { exportCancel = true; },
 };
@@ -2331,13 +2332,14 @@ function restorePlayback() { seekAll(T.time); if (T.playing) playVideos().forEac
 
 /* ============ Export ============ */
 const EX = { tab: 'image', imgFmt: 'png', imgRes: 'canvas', imgW: 1920, quality: 92, frameT: 0, transparent: false,
-             vidFmt: 'mp4', vidRes: 'canvas', fps: 30, dur: 0, vq: 60,
+             vidFmt: 'mp4', vidRes: 'canvas', fps: 30, dur: 0, durAuto: true, vq: 60,
              layFmt: 'svg', layRes: 'canvas', lCells: true, lGuides: true, lBg: true, lImages: false, name: 'bento-composition' };
 const MIMES = { mp4: ['video/mp4;codecs=avc1.640033', 'video/mp4;codecs=avc1.4d0028', 'video/mp4;codecs=avc1', 'video/mp4'], webm: ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'] };
 const pickMime = fmt => (window.MediaRecorder ? MIMES[fmt].find(t => MediaRecorder.isTypeSupported(t)) || '' : '');
 const activeVideos = () => S.boxes.filter(b => b.media).map(b => media.get(b.media.id)).filter(m => m && m.type === 'video');
-const autoDuration = () => { const v = activeVideos(); return v.length ? Math.min(60, Math.ceil(Math.max(...v.map(m => m.dur || 0))) || 6) : 6; };
-function openExport() { if (!EX.dur) EX.dur = autoDuration(); if (!T.playing) EX.frameT = Math.round(T.time * 10) / 10; if (!pickMime(EX.vidFmt)) EX.vidFmt = pickMime('mp4') ? 'mp4' : 'webm'; $('#exportModal').hidden = false; syncExport(); }
+// Default length = the longest video in the layout, exact to the frame (no rounding up, so nothing repeats). 6 s when there is no video.
+const autoDuration = () => { const v = activeVideos(); const d = v.length ? Math.max(...v.map(m => m.el.duration || m.dur || 0)) : 0; return d > 0 ? Math.min(120, Math.round(d * 100) / 100) : 6; };
+function openExport() { if (EX.durAuto || !EX.dur) EX.dur = autoDuration(); if (!T.playing) EX.frameT = Math.round(T.time * 10) / 10; if (!pickMime(EX.vidFmt)) EX.vidFmt = pickMime('mp4') ? 'mp4' : 'webm'; $('#exportModal').hidden = false; syncExport(); }
 function closeExport() { $('#exportModal').hidden = true; }
 $('#exportModal').addEventListener('pointerdown', e => { if (e.target.id === 'exportModal') closeExport(); });
 $$('[data-ex]').forEach(el => {
@@ -2352,6 +2354,7 @@ $$('[data-ex]').forEach(el => {
     else EX[key] = el.value;
     if (key === 'imgRes' && el.value !== 'custom') EX.imgW = resDims(el.value)[0];
     if (key === 'imgW') EX.imgRes = 'custom';
+    if (key === 'dur') EX.durAuto = false;
     syncExport();
   };
   el.addEventListener(el.type === 'range' || el.type === 'text' ? 'input' : 'change', read);
@@ -2363,6 +2366,7 @@ function exportDims() {
   return resDims(EX.layRes);
 }
 function syncExport() {
+  if (EX.durAuto) EX.dur = autoDuration();
   $('#imgResCanvas').textContent = $('#vidResCanvas').textContent = $('#layResCanvas').textContent = `Canvas · ${G.W} × ${G.H}`;
   $('#imgRes2x').textContent = `Canvas 2× · ${G.W * 2} × ${G.H * 2}`;
   $$('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== EX.tab; });
@@ -2392,7 +2396,9 @@ function syncExport() {
   $('#copySvg').hidden = EX.tab !== 'layout';
   const ext = EX.tab === 'image' ? (EX.imgFmt === 'jpeg' ? 'jpg' : EX.imgFmt) : EX.tab === 'video' ? EX.vidFmt : EX.layFmt;
   let meta = `${w} × ${h} px, ${EX.name || 'bento'}.${ext}`;
-  if (EX.tab === 'video') { meta += `, ${EX.fps} fps, ${EX.dur || autoDuration()} s`; meta += encoderSupport[EX.vidFmt] ? '. Rendered frame by frame with exact colours (BT.709), so it can take longer than the clip.' : ''; }
+  $('#durAuto').classList.toggle('on', !!EX.durAuto);
+  $('#durAuto').title = EX.durAuto ? 'Following the longest video' : 'Reset to the longest video';
+  if (EX.tab === 'video') { const nv = activeVideos().length, frames = Math.round((EX.dur || autoDuration()) * EX.fps); meta += `, ${EX.fps} fps, ${EX.dur || autoDuration()} s (${frames} frames)`; meta += EX.durAuto ? (nv ? '. Auto: matches the longest video.' : '. Auto: no video in the layout, so 6 s.') : '. Custom length: shorter videos loop, longer ones are cut.'; meta += encoderSupport[EX.vidFmt] ? '. Rendered frame by frame with exact colours (BT.709), so it can take longer than the clip.' : ''; }
   $('#exMeta').textContent = meta;
   $('#exportRun').textContent = EX.tab === 'video' ? 'Record video' : 'Export';
 }
@@ -2486,7 +2492,7 @@ function seekOne(v, t) {
   });
 }
 async function renderVideoWebCodecs() {
-  const [w, h] = exportDims(), fps = EX.fps, dur = clamp(EX.dur || autoDuration(), 1, 120);
+  const [w, h] = exportDims(), fps = EX.fps, dur = clamp(EX.dur || autoDuration(), 0.1, 120);
   const bitrate = Math.min(100e6, Math.round(w * h * fps * (0.03 + EX.vq / 100 * 0.25)));
   const enc = await pickEncoder(EX.vidFmt, w, h, fps, bitrate);
   if (!enc) return false;
@@ -2560,7 +2566,7 @@ async function runExport() {
   if (!mime || !HTMLCanvasElement.prototype.captureStream) { toast('This browser can’t record that format. Try WebM, or use Chrome.'); return; }
   closeExport();
   const [w, h] = exportDims(), c = document.createElement('canvas'); c.width = w; c.height = h;
-  const x = c.getContext('2d'), dur = clamp(EX.dur || autoDuration(), 1, 120), fps = EX.fps, k = w / G.W;
+  const x = c.getContext('2d'), dur = clamp(EX.dur || autoDuration(), 0.1, 120), fps = EX.fps, k = w / G.W;
   await Promise.all(activeVideos().map(m => { m.el.currentTime = 0; return m.el.play().catch(() => {}); }));
   drawComposition(x, k);
   const stream = c.captureStream(0), track = stream.getVideoTracks()[0];
