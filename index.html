@@ -101,7 +101,8 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border:0;border-radiu
 .select{appearance:none;-webkit-appearance:none;flex:1;height:26px;border:0;border-radius:7px;background:var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='14' fill='none' stroke='%238e8e93' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2 5 3-3 3 3M2 9l3 3 3-3'/%3E%3C/svg%3E") no-repeat right 8px center;padding:0 26px 0 9px;cursor:pointer;min-width:0}
 .select option{background:var(--win);color:var(--label)}
 .seg{display:flex;background:var(--fill);border-radius:8px;padding:2px;gap:2px;flex:1}
-.seg button{flex:1;border:0;background:transparent;font-weight:500;font-size:12.5px;height:24px;padding:0 6px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.seg button{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent;font-weight:500;font-size:12.5px;height:24px;padding:0 3px;border-radius:6px;cursor:pointer;white-space:nowrap;letter-spacing:-.01em}
+.seg{min-width:0}
 .seg button[aria-pressed=true]{background:var(--seg-on);box-shadow:0 1px 3px rgba(0,0,0,.22),0 0 0 .5px rgba(0,0,0,.06)}
 .seg button[disabled]{opacity:.35;pointer-events:none}
 .switch{appearance:none;-webkit-appearance:none;width:40px;height:24px;margin:0 0 0 auto;border-radius:12px;background:var(--fill2);position:relative;cursor:pointer;transition:background .2s;flex:0 0 auto}
@@ -284,14 +285,6 @@ kbd{font:500 11px var(--font);min-width:19px;height:19px;padding:0 5px;display:i
     <section class="sec" id="selSec" hidden></section>
 
     <details class="sec" open>
-      <summary>Looks</summary>
-      <div class="group">
-        <div class="look-grid" id="lookGrid"></div>
-        <div class="row"><input class="text-in" id="lookName" placeholder="Name this look" maxlength="40"><button class="btn" data-act="look-save" title="Save corners, spacing, colours and text style">Save</button></div>
-      </div>
-    </details>
-
-    <details class="sec" open>
       <summary>Canvas</summary>
       <div class="group">
         <div class="row"><label for="sizePreset">Size</label>
@@ -338,7 +331,7 @@ kbd{font:500 11px var(--font);min-width:19px;height:19px;padding:0 5px;display:i
       <summary>Corners</summary>
       <div class="group">
         <div class="row"><label for="cornerStyle">Style</label><select id="cornerStyle" class="select"></select></div>
-        <div class="row" data-corner="rounded smooth soft squircle chamfer notch scooped mixed"><span class="lbl">Radius in</span><div class="seg" data-seg="radiusUnit"><button data-v="px">Pixels</button><button data-v="%">% of cell</button></div></div>
+        <div class="row stack" data-corner="rounded smooth soft squircle chamfer notch scooped mixed"><span class="lbl">Radius in</span><div class="seg" data-seg="radiusUnit"><button data-v="px">Pixels</button><button data-v="%">% of cell</button></div></div>
         <div data-slider="radius" data-label="Radius" data-min="0" data-max="800" data-unit="px" data-corner="rounded smooth soft squircle chamfer notch scooped mixed" data-runit="px"></div>
         <div data-slider="radiusPct" data-label="Radius" data-min="0" data-max="50" data-unit="%" data-corner="rounded smooth soft squircle chamfer notch scooped mixed" data-runit="%"></div>
         <div class="note" data-corner="rounded smooth soft squircle chamfer notch scooped mixed" id="radiusNote"></div>
@@ -359,9 +352,17 @@ kbd{font:500 11px var(--font);min-width:19px;height:19px;padding:0 5px;display:i
     </details>
 
     <details class="sec" open>
+      <summary>Looks</summary>
+      <div class="group">
+        <div class="look-grid" id="lookGrid"></div>
+        <div class="row"><input class="text-in" id="lookName" placeholder="Name this look" maxlength="40"><button class="btn" data-act="look-save" title="Save corners, spacing, colours and text style">Save</button></div>
+      </div>
+    </details>
+
+    <details class="sec" open>
       <summary>Shuffle settings</summary>
       <div class="group">
-        <div class="row"><span class="lbl">Cells</span><div class="seg" data-seg="shuffleCount"><button data-v="filled" title="One cell per image, video or text. No empty cells are added.">Filled only</button><button data-v="same" title="Keep the current number of cells">Same count</button><button data-v="density" title="The Density slider decides, so empty cells can be added">Density</button></div></div>
+        <div class="row stack"><span class="lbl">Cells</span><div class="seg" data-seg="shuffleCount"><button data-v="filled" title="One cell per image, video or text. No empty cells are added.">Filled only</button><button data-v="same" title="Keep the current number of cells">Same count</button><button data-v="density" title="The Density slider decides, so empty cells can be added">Density</button></div></div>
         <div data-slider="density" data-label="Density" data-min="0" data-max="4" data-fmt="density" data-shuffle id="densityRow"></div>
         <div data-slider="symmetry" data-label="Symmetry" data-min="0" data-max="100" data-unit="%" data-shuffle></div>
         <div data-slider="hero" data-label="Hero size" data-min="0" data-max="80" data-unit="%" data-fmt="hero" data-shuffle></div>
