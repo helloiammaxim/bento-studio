@@ -732,10 +732,10 @@ function cellD(style, w, h, k = 1, grow = 0) {
 
 /* ============ State ============ */
 const DEFAULTS = {
-  cw: 1920, ch: 1080, scaleSpacing: true, mc: 12, mr: 12, gapX: 20, gapY: 20, pad: 48,
+  cw: 1920, ch: 1080, scaleSpacing: true, mc: 12, mr: 12, gapX: 24, gapY: 24, pad: 64,
   cornerStyle: 'smooth', radiusUnit: 'px', radius: 44, radiusPct: 20, smooth: 0.6, sq: 30,
-  bgMode: 'solid', bg1: '#000000', bg2: '#2b2d42', bgAngle: 135, cell: '#1c1c1e',
-  bgImg: null, bgFit: 'cover', bgZoom: 1, bgPx: 0, bgPy: 0, cellOpacity: 100, cellBlur: 0,
+  bgMode: 'solid', bg1: '#114022', bg2: '#2b2d42', bgAngle: 135, cell: '#008540', // Schwarzwald ground, Kräuterhaus Grün cells
+  bgImg: null, bgFit: 'cover', bgZoom: 1, bgPx: 0, bgPy: 0, cellOpacity: 100, cellBlur: 20,
   guides: true, labels: false, swapMedia: false,
   density: 2, symmetry: 40, hero: 55, minW: 1, minH: 1, orient: 'balanced', seed: 237088, shuffleScope: 'all', shuffleCount: 'filled',
 };
@@ -1903,8 +1903,16 @@ let palette = (() => {
 })();
 let palEdit = false;
 const PAL_TARGET = { bg1: () => $('[data-color="bg1"]'), bg2: () => $('[data-color="bg2"]'), cell: () => $('[data-color="cell"]'), fill: () => $('#cellFill'), text: () => $('[data-t="color"]') };
+// Swatch tooltips list the colour as HEX, then RGB, then HSB
+function colorInfo(hex) {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)), R = r / 255, Gn = g / 255, B = b / 255;
+  const mx = Math.max(R, Gn, B), d = mx - Math.min(R, Gn, B);
+  let h = !d ? 0 : mx === R ? ((Gn - B) / d) % 6 : mx === Gn ? (B - R) / d + 2 : (R - Gn) / d + 4;
+  h = Math.round(h * 60); if (h < 0) h += 360;
+  return `HEX ${hex.toUpperCase()}\nRGB ${r}, ${g}, ${b}\nHSB ${h}°, ${Math.round(mx ? d / mx * 100 : 0)}%, ${Math.round(mx * 100)}%`;
+}
 const palInner = label => (label ? `<span class="pal-lbl">${escapeHtml(label)}</span>` : '')
-  + palette.map((s, i) => `<button type="button" class="sw" data-hex="${s.hex}" data-i="${i}" style="--c:${s.hex}" title="${escapeHtml(s.name)} ${s.hex.toUpperCase()}${palEdit ? ' · click to remove' : ''}" aria-label="${palEdit ? 'Remove ' : ''}${escapeHtml(s.name)}" aria-pressed="false"></button>`).join('')
+  + palette.map((s, i) => `<button type="button" class="sw" data-hex="${s.hex}" data-i="${i}" style="--c:${s.hex}" title="${escapeHtml(s.name)}&#10;${colorInfo(s.hex).replace(/\n/g, '&#10;')}${palEdit ? '&#10;Click to remove' : ''}" aria-label="${palEdit ? 'Remove ' : ''}${escapeHtml(s.name)}" aria-pressed="false"></button>`).join('')
   + `<button type="button" class="pal-tool" data-pal-add title="Save the current colour as a swatch" aria-label="Add swatch">+</button>`
   + `<button type="button" class="pal-tool${palEdit ? ' on' : ''}" data-pal-edit title="${palEdit ? 'Finish editing swatches' : 'Remove swatches'}" aria-pressed="${palEdit}">${palEdit ? 'Done' : 'Edit'}</button>`
   + (palEdit ? `<button type="button" class="pal-tool" data-pal-reset title="Bring back the KSB colours">Reset</button>` : '');
@@ -1947,7 +1955,7 @@ binders.push(syncPal);
 const ACCENT_KEY = 'bento-studio:accent', ACCENT_DEFAULT = '#008540';
 const ACCENT_PAL = [['Kräuterhaus Grün', '#008540'], ['Blattgrün', '#94c120'], ['Sonnengelb', '#f7c600'], ['Schwarzwald', '#114022'], ['Tinte', '#232a24'], ['Quelle', '#90cceb'], ['Blüte', '#ffa69d'], ['Malve', '#dfb1da']];
 const accentBtn = $('#accentBtn'), accentPop = $('#accentPop');
-$('#accentPal').innerHTML = ACCENT_PAL.map(([n, h]) => `<button type="button" data-hex="${h}" style="--c:${h}" title="${n} ${h.toUpperCase()}" aria-label="${n}" aria-pressed="false"></button>`).join('');
+$('#accentPal').innerHTML = ACCENT_PAL.map(([n, h]) => `<button type="button" data-hex="${h}" style="--c:${h}" title="${n}&#10;${colorInfo(h).replace(/\n/g, '&#10;')}" aria-label="${n}" aria-pressed="false"></button>`).join('');
 function setAccent(hex, save) {
   const v = HEX6.test(hex || '') ? hex.toLowerCase() : ACCENT_DEFAULT, r = document.documentElement.style;
   r.setProperty('--accent', v); r.setProperty('--ok', v);
@@ -2072,7 +2080,7 @@ binders.push(() => {
   const grad = S.settings.bgMode === 'gradient', img = S.settings.bgMode === 'image';
   $('#bgColors').hidden = S.settings.bgMode === 'none';
   $('#bg2').hidden = !grad; $('#angleRow').hidden = !grad;
-  $('#bgColorLbl').textContent = img ? 'Behind' : 'Color';
+  $('#bgColorLbl').textContent = img ? 'Background' : 'Color';
   $('#bgImgRows').hidden = !img;
   const bgr = bgReframing(), rb = $('#bgReframeBtn');
   rb.textContent = bgr ? 'Done' : 'Reposition'; rb.classList.toggle('primary', bgr);
@@ -3729,7 +3737,7 @@ initialized = true;
   const PHRASES = [
     [/(\d+) artboards, one (\w+) each, in (.+?)\.zip\. Sizes follow each artboard \(this one: (.+?)\)/, '$1 Zeichenflächen, je eine $2-Datei, in $3.zip. Die Größen folgen der jeweiligen Zeichenfläche (diese: $4)'],
     [/\((\d+) frames\)/, '($1 Bilder)'],
-    [/ · click to remove$/, ' · zum Entfernen klicken'],
+    [/\nClick to remove$/, '\nZum Entfernen klicken'],
     [/\. Auto: matches the longest video\./, '. Auto: entspricht dem längsten Video.'],
     [/\. Auto: no video in the layout, so 6 s\./, '. Auto: kein Video im Layout, daher 6 s.'],
     [/\. Custom length: shorter videos loop, longer ones are cut\./, '. Eigene Länge: kürzere Videos laufen in Schleife, längere werden gekürzt.'],
