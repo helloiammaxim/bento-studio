@@ -2497,12 +2497,13 @@ function setHint(mode) {
   if (hk === hintMode) return; hintMode = hk;
   const k = s => `<kbd>${s}</kbd>`;
   const H = {
-    '': [playVideos && playVideos().length ? `Tap ${k('Space')} to play or pause` : null, `Hold ${k('Space')} and drag to pan`, `Drop images or videos anywhere`, `Drag a cell to move it`, `Drop onto another cell to swap`, `Hold ${k(ALT)} while dropping to merge`, `${k(SHIFT)}-click to select several, then drag them together`, `Copy and paste cells with ${k(MOD + 'C')} and ${k(MOD + 'V')}`, DOC.artboards.length > 1 ? `Drag cells onto another artboard to move them` : null],
-    move: [`Drop anywhere: cells in the way move aside`, `Hold ${k(ALT)} over a cell to merge`],
+    '': [playVideos && playVideos().length ? `Tap ${k('Space')} to play or pause` : null, `Hold ${k('Space')} and drag to pan`, `Drop images or videos anywhere`, `Drag a cell to move it`, `Drop onto another cell to swap`, `Hold ${k(ALT)} while dragging to copy`, `Hold ${k(SHIFT)} while dropping to merge`, `${k(SHIFT)}-click to select several, then drag them together`, `Copy and paste cells with ${k(MOD + 'C')} and ${k(MOD + 'V')}`, DOC.artboards.length > 1 ? `Drag cells onto another artboard to move them` : null],
+    move: [`Drop anywhere: cells in the way move aside`, `Hold ${k(ALT)} to copy`, `Hold ${k(SHIFT)} over a cell to merge`],
+    copy: [`Release to drop a copy here`, `Let go of ${k(ALT)} to move instead`],
     trade: [`Release to trade places with this cell`, `Sizes are exchanged because the cells can't fit otherwise`],
     swap: [`Release to place it here`, `The cells in the way keep their size and move into the free space`],
-    swapMedia: [`Release to swap media and text only`, `Hold ${k(ALT)} to merge instead`],
-    merge: [`Release to merge`, `The merged cell keeps this cell's media`, `Let go of ${k(ALT)} to swap instead`],
+    swapMedia: [`Release to swap media and text only`, `Hold ${k(SHIFT)} to merge instead`],
+    merge: [`Release to merge`, `The merged cell keeps this cell's media`, `Let go of ${k(SHIFT)} to swap instead`],
     resize: [`Snaps to the grid`, `Hold ${k(SHIFT)} to resize neighbours with it`],
     groupMove: [`Moving all selected cells together`, `Cells in the way move into the free space`],
     group: [`Resizing every selected cell by the same amount`],
@@ -2710,6 +2711,13 @@ function updateGroupMove(e) {
   const p = toL(e), st = S.settings, dx = p.x - drag.p0.x, dy = p.y - drag.p0.y, gb = drag.bounds;
   for (const m of drag.members) { const vr = { x: m.r0.x + dx, y: m.r0.y + dy, w: m.r0.w, h: m.r0.h }; m.el._cur = vr; paint(m.el, vr); }
   if (showTransfer(e)) return;
+  if (keys.alt) {
+    previewDisplaced(null);
+    const lead = drag.members.find(m => m.id === drag.id), lr = { x: lead.r0.x + dx, y: lead.r0.y + dy, w: lead.r0.w, h: lead.r0.h };
+    drag.plan = { mode: 'copy', x: lr.x, y: lr.y };
+    ghosts = []; chips = [{ r: lr, text: `Copy ${drag.members.length} cells` }];
+    drag.hint = 'copy'; setHint(); drawOverlay(); return;
+  }
   const dc = clamp(Math.round(dx / G.sx), -gb.c0, st.mc - gb.c1), dr = clamp(Math.round(dy / G.sy), -gb.r0, st.mr - gb.r1);
   const group = drag.members.map(m => byId(m.id));
   const plan = dc || dr ? planDisplace(group, dc, dr) : null;
@@ -2729,7 +2737,18 @@ function updateMove(e) {
   drag.el._cur = vr; paint(drag.el, vr);
   if (showTransfer(e)) return;
   const t = hit(p.x, p.y, drag.id);
-  if (t && keys.alt) {
+  if (keys.alt) {
+    // Alt: leave the cell where it is and drop a copy (onto a full spot, the copy's content goes into that cell)
+    previewDisplaced(null);
+    const cand = { c: clamp(Math.round((vr.x - G.pad) / G.sx), 0, st.mc - b.w), r: clamp(Math.round((vr.y - G.pad) / G.sy), 0, st.mr - b.h), w: b.w, h: b.h };
+    const ok = fits(cand), gr = ok || !t ? rectOf(cand) : rectOf(t);
+    drag.plan = { mode: 'copy', x: vr.x, y: vr.y };
+    ghosts = [{ r: gr, cls: ok || t ? '' : 'dim', box: b }];
+    chips = [{ r: gr, text: ok || !t ? 'Copy' : 'Copy content here' }];
+    drag.hint = 'copy';
+    setHint(); drawOverlay(); return;
+  }
+  if (t && keys.shift) {
     previewDisplaced(null);
     const m = mergeSet([drag.id, t.id]), gr = rectOf(m.rect);
     drag.plan = { mode: 'merge', target: t.id };
@@ -2774,6 +2793,14 @@ function endMove(d) {
   if (d.members) d.members.forEach(m => m.el.classList.remove('lifted'));
   const b = byId(d.id), pl = d.plan;
   if (b && pl && pl.mode === 'transfer') { fineEnd(d.fine, d.before); transferDrop(d, pl); return; }
+  if (b && pl && pl.mode === 'copy') {
+    fineEnd(d.fine, d.before);
+    const items = snapItems((d.group ? [...d.group] : [d.id]).map(byId).filter(Boolean)), lead = Math.max(0, items.findIndex(it => it.box.id === d.id));
+    const res = placeOnto(S, items, lead, pl.x, pl.y, 1);
+    if (res.ids.length) { ui.sel = new Set(res.ids); ui.anchor = res.ids[0]; commit(); }
+    else toast('No room for a copy here.');
+    return;
+  }
   if (b && pl) {
     if (pl.mode === 'place') { for (const [id, to] of pl.moves) { const x = byId(id); if (x) { x.c = to.c; x.r = to.r; } } }
     else if (pl.mode === 'swap') { const t = byId(pl.target); if (t) { const tmp = { c: b.c, r: b.r, w: b.w, h: b.h }; Object.assign(b, { c: t.c, r: t.r, w: t.w, h: t.h }); Object.assign(t, tmp); } }
@@ -2967,7 +2994,7 @@ const isTyping = t => (t.tagName === 'INPUT' && !['range', 'checkbox', 'color', 
 function reprocessMove() { if (drag && drag.active && drag.type === 'move' && lastMove) updateMove(lastMove); }
 window.addEventListener('keydown', e => {
   if (e.key === 'Alt') { keys.alt = true; if (drag && drag.active) { e.preventDefault(); reprocessMove(); } }
-  if (e.key === 'Shift') keys.shift = true;
+  if (e.key === 'Shift') { keys.shift = true; if (drag && drag.active) reprocessMove(); }
   if (!$('#exportModal').hidden) { if (e.key === 'Escape') closeExport(); return; }
   const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
   if (mod && k === 'z') { if (isTyping(e.target)) return; e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -2995,7 +3022,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => {
   if (e.key === 'Alt') { keys.alt = false; e.preventDefault(); reprocessMove(); }
-  if (e.key === 'Shift') keys.shift = false;
+  if (e.key === 'Shift') { keys.shift = false; if (drag && drag.active) reprocessMove(); }
   if (e.code === 'Space') { const tap = keys.space && !keys.spaceUsed; keys.space = false; stage.classList.remove('space'); if (!isTyping(e.target)) { e.preventDefault(); if (tap && !drag) togglePlay(); } }
 });
 window.addEventListener('blur', () => { keys.alt = keys.shift = keys.space = false; stage.classList.remove('space'); });
@@ -3672,6 +3699,9 @@ initialized = true;
     'Sizing': 'Skalierung',
     'Reposition': 'Verschieben', 'Move and zoom the background image': 'Hintergrundbild verschieben und zoomen', 'Centre the background image at 100%': 'Hintergrundbild zentrieren, 100 %',
     'Drag to move the background image': 'Ziehen, um das Hintergrundbild zu verschieben', 'Scroll to zoom it': 'Scrollen zum Zoomen',
+    // Alt-drag copies
+    'while dragging to copy': 'beim Ziehen gedrückt, um zu kopieren', 'to copy': 'gedrückt zum Kopieren', 'Release to drop a copy here': 'Loslassen, um hier eine Kopie abzulegen',
+    'to move instead': 'los, um stattdessen zu verschieben', 'Copy content here': 'Inhalt hierher kopieren', 'No room for a copy here.': 'Hier ist kein Platz für eine Kopie.',
     // cells across artboards
     'Copy': 'Kopieren', 'Cut': 'Ausschneiden', 'Paste': 'Einfügen', 'No room for the copied cells on this artboard.': 'Auf dieser Zeichenfläche ist kein Platz für die kopierten Zellen.',
     'Release to move the cells to this artboard': 'Loslassen, um die Zellen auf diese Zeichenfläche zu verschieben', 'to copy instead': 'gedrückt, um stattdessen zu kopieren',
@@ -3682,6 +3712,7 @@ initialized = true;
   // dynamic strings: the first matching pattern wins
   const cw = n => `${n} ${n === '1' ? 'Zelle' : 'Zellen'}`;
   const PATTERNS = [
+    [/^Copy (\d+) cells$/, (m, n) => `${n} Zellen kopieren`],
     [/^Copy \((.+)\)$/, (m, k) => `Kopieren (${k})`], [/^Cut \((.+)\)$/, (m, k) => `Ausschneiden (${k})`],
     [/^Paste \((.+)\), also on another artboard$/, (m, k) => `Einfügen (${k}), auch auf einer anderen Zeichenfläche`],
     [/^(Copied|Cut) (\d+) cells?\. Paste with (.+)V, on any artboard\.$/, (m, a, n, k) => `${cw(n)} ${a === 'Cut' ? 'ausgeschnitten' : 'kopiert'}. Mit ${k}V auf jeder Zeichenfläche einfügen.`],
